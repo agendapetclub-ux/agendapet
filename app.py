@@ -172,6 +172,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Ocultar menu superior e footer (recomendado para app público)
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display: none !important;}
+    [data-testid="stToolbar"] {visibility: hidden !important;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 for key in ["user", "nome", "email", "role", "menu", "agendamento_sucesso", "profissional_id"]:
     if key not in st.session_state:
         st.session_state[key] = None
