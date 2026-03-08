@@ -9,7 +9,6 @@ from datetime import datetime, date, time, timedelta
 from PIL import Image
 import io
 import re
-
 # Configurações
 DB_PATH = "petclub.db"
 APP_NAME = "PET CLUB"
@@ -22,22 +21,16 @@ HORARIO_ABERTURA = time(8, 0)
 HORARIO_FECHAMENTO = time(18, 0)
 INTERVALO_MINIMO_MINUTOS = 30
 DIAS_SEMANA = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-
 def get_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
-
 def generate_salt():
     return base64.b64encode(secrets.token_bytes(16)).decode()
-
 def hash_password(plain, salt):
     return base64.b64encode(hashlib.pbkdf2_hmac("sha256", plain.encode(), base64.b64decode(salt), 100000)).decode()
-
 def verify_password(plain, stored_hash, stored_salt):
     return hash_password(plain, stored_salt) == stored_hash
-
 def normalize_username(username):
     return (username or "").strip().lower()
-
 def resize_and_optimize_image(uploaded_file):
     if uploaded_file is None:
         return None
@@ -55,7 +48,6 @@ def resize_and_optimize_image(uploaded_file):
     except Exception as e:
         st.warning(f"Erro na imagem: {str(e)}")
         return None
-
 def show_paw_prints():
     st.markdown("""
         <style>
@@ -89,7 +81,6 @@ def show_paw_prints():
             <div class="paw-step" style="--step:8; --start-x:87%; --start-y:2%;">🐾</div>
         </div>
     """, unsafe_allow_html=True)
-
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
@@ -156,11 +147,8 @@ def init_db():
                     ("admin", hash_pw, salt))
     conn.commit()
     conn.close()
-
 init_db()
-
 st.set_page_config(page_title=f"{APP_NAME} - Agendamentos", layout="wide", page_icon="🐾")
-
 st.markdown("""
     <style>
     .stButton > button {width: 100%; border-radius: 8px; font-weight: bold; margin: 10px 0; padding: 12px;}
@@ -168,14 +156,11 @@ st.markdown("""
     .warning-box {background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 8px; border: 1px solid #ffeeba; margin: 15px 0;}
     </style>
 """, unsafe_allow_html=True)
-
 for key in ["user", "nome", "email", "role", "menu", "agendamento_sucesso", "profissional_id"]:
     if key not in st.session_state:
         st.session_state[key] = None
-
 if st.session_state.user and st.session_state.menu is None:
     st.session_state.menu = "Serviços Agendados" if st.session_state.role == "admin" else ("Meus Pets" if st.session_state.role == "cliente" else "Meus Atendimentos")
-
 # SIDEBAR
 st.sidebar.title(f"🐾 {APP_NAME}")
 if st.session_state.user:
@@ -193,9 +178,7 @@ if st.session_state.user:
         for k in list(st.session_state.keys()):
             del st.session_state[k]
         st.rerun()
-
 st.sidebar.caption(f"{APP_NAME} • Sistema de Agendamento • {YEAR}")
-
 # CONSULTA PÚBLICA
 st.markdown("### Consultar Agendamento pelo Protocolo")
 col1, col2 = st.columns([3, 1])
@@ -242,9 +225,7 @@ with col2:
                 st.error("Protocolo não encontrado.")
         else:
             st.warning("Digite o protocolo.")
-
 st.markdown("---")
-
 # LOGIN / CADASTRO
 if st.session_state.user is None:
     st.header(f"Bem-vindo ao {APP_NAME}")
@@ -384,7 +365,6 @@ else:
                                 st.error(f"Erro ao finalizar: {str(e)}")
                             finally:
                                 conn.close()
-
     if st.session_state.role == "admin":
         if st.session_state.menu == "Serviços Agendados":
             st.header("Serviços Agendados - Painel Administrativo")
@@ -497,7 +477,6 @@ else:
                     use_container_width=True,
                     hide_index=True
                 )
-
         elif st.session_state.menu == "Clientes Cadastrados":
             st.header("Clientes Cadastrados")
             conn = get_conn()
@@ -542,7 +521,6 @@ else:
                     use_container_width=True,
                     hide_index=True
                 )
-
         elif st.session_state.menu == "Profissionais":
             st.header("Cadastro de Funcionários / Profissionais")
             st.subheader("Adicionar Novo Profissional")
@@ -659,7 +637,6 @@ else:
                             finally:
                                 conn_del.close()
             conn.close()
-
         elif st.session_state.menu == "Bloqueios de Agenda":
             st.header("Bloqueios de Agenda")
             conn = get_conn()
@@ -725,7 +702,6 @@ else:
                                 st.error(f"Erro ao excluir: {str(e)}")
                             finally:
                                 conn_del.close()
-
     else: # Área do cliente
         if st.session_state.menu == "Editar Cadastro":
             st.header("Editar Meu Cadastro")
@@ -874,7 +850,6 @@ else:
                                 st.error(f"Erro ao alterar senha: {str(e)}")
                             finally:
                                 conn.close()
-
         elif st.session_state.menu == "Meus Pets":
             st.header(f"Meus Pets - {st.session_state.nome or st.session_state.user}")
             conn = get_conn()
@@ -998,7 +973,6 @@ else:
                             st.error(f"Erro ao cadastrar pet: {str(e)}")
                         finally:
                             conn.close()
-
         elif st.session_state.menu == "Agendar Serviço":
             st.header(f"Agendar Serviço - {st.session_state.nome or st.session_state.user}")
             if 'agendamento_sucesso' not in st.session_state:
@@ -1056,7 +1030,6 @@ else:
                             "Outros": None
                         }
                         servico = st.selectbox("Serviço", list(servico_map.keys()), key="servico_agenda")
-                        funcao_chave = servico_map.get(servico)
                         obs = st.text_area("Observações / necessidades especiais", height=100, key="obs_agenda")
                         endereco_domiciliar = ""
                         if servico == "Consulta em Domicílio":
@@ -1106,86 +1079,110 @@ else:
                                 st.error(f"Horário fora do expediente ({HORARIO_ABERTURA.strftime('%H:%M')} às {HORARIO_FECHAMENTO.strftime('%H:%M')}).")
                             else:
                                 conn = get_conn()
-                                if funcao_chave:
-                                    profs_disponiveis = profs_df[
-                                        profs_df['funcao'].str.strip().str.lower().str.contains(funcao_chave.lower())
-                                    ]
-                                else:
-                                    profs_disponiveis = profs_df
-                                # Verificação extra para serviços que exigem veterinário
-                                if servico == "Consulta em Domicílio" and profs_disponiveis.empty:
-                                    st.error("Não há veterinário(a) disponível no momento para consulta em domicílio. Contate o Pet Club.11.99247-8769")
+                                # Definir filtro de função de forma mais tolerante
+                                def get_funcao_filter(servico):
+                                    if servico in ["Consulta Veterinária", "Consulta em Domicílio", "Vacinação", "Exames"]:
+                                        # Aceita variações comuns
+                                        return lambda f: any(palavra in f.lower() for palavra in ["veterin", "vet", "veter"])
+                                    elif servico in ["Banho Simples", "Tosa Higiênica", "Tosa Completa", "Banho + Tosa"]:
+                                        return lambda f: "tos" in f.lower()
+                                    elif servico == "Taxi Dog":
+                                        return lambda f: "motorista" in f.lower() or "taxi" in f.lower()
+                                    else:
+                                        return lambda f: True  # Outros → qualquer profissional ativo
+
+                                filtro_funcao = get_funcao_filter(servico)
+
+                                profs_df['funcao_lower'] = profs_df['funcao'].fillna("").str.strip().str.lower()
+                                profs_disponiveis = profs_df[profs_df['funcao_lower'].apply(filtro_funcao)]
+
+                                # Limpar coluna temporária
+                                profs_df.drop(columns=['funcao_lower'], inplace=True)
+
+                                if profs_disponiveis.empty:
+                                    if "Consulta" in servico and "Domicílio" in servico:
+                                        st.error("Não há veterinário(a) disponível no momento para consulta em domicílio. Contate o Pet Club pelo WhatsApp: (11) 99247-8769")
+                                    else:
+                                        st.error(f"Não há profissional disponível para o serviço '{servico}'. Contate o Pet Club.")
                                     conn.close()
                                     st.stop()
-                                if profs_disponiveis.empty:
-                                    st.error("Nenhum profissional disponível para este serviço.")
-                                else:
-                                    bloqueado = False
-                                    for _, prof in profs_disponiveis.iterrows():
-                                        count = conn.execute("""
-                                            SELECT COUNT(*) FROM bloqueios_horarios
-                                            WHERE profissional_id = ?
-                                            AND dia_semana = ?
-                                            AND hora_inicio <= ?
-                                            AND hora_fim >= ?
-                                        """, (prof['id'], data.strftime('%A'), hora.strftime('%H:%M'), hora.strftime('%H:%M'))).fetchone()[0]
-                                        if count > 0:
-                                            bloqueado = True
-                                            break
-                                    if bloqueado:
-                                        st.error("Horário bloqueado para este profissional neste dia.")
-                                    else:
-                                        escolhido = None
-                                        for _, prof in profs_disponiveis.iterrows():
-                                            agendamentos = conn.execute("""
-                                                SELECT data_hora_pref
-                                                FROM atendimentos
-                                                WHERE profissional_id = ?
-                                                AND status NOT IN ('Cancelado', 'Não Compareceu')
-                                                AND substr(data_hora_pref, 1, 10) = ?
-                                            """, (prof['id'], data_str)).fetchall()
-                                            conflito = False
-                                            for (dh,) in agendamentos:
-                                                try:
-                                                    dh_dt = datetime.strptime(dh, "%d/%m/%Y às %H:%M")
-                                                    minutos_diff = abs((data_hora_dt - dh_dt).total_seconds() / 60)
-                                                    if minutos_diff < INTERVALO_MINIMO_MINUTOS:
-                                                        conflito = True
-                                                        break
-                                                except ValueError:
-                                                    pass
-                                            if not conflito:
-                                                escolhido = {'id': prof['id'], 'nome': prof['nome_completo']}
+
+                                # Restante da lógica de bloqueios e conflitos
+                                bloqueado = False
+                                for _, prof in profs_disponiveis.iterrows():
+                                    count = conn.execute("""
+                                        SELECT COUNT(*) FROM bloqueios_horarios
+                                        WHERE profissional_id = ?
+                                        AND dia_semana = ?
+                                        AND hora_inicio <= ?
+                                        AND hora_fim >= ?
+                                    """, (prof['id'], data.strftime('%A'), hora.strftime('%H:%M'), hora.strftime('%H:%M'))).fetchone()[0]
+                                    if count > 0:
+                                        bloqueado = True
+                                        break
+
+                                if bloqueado:
+                                    st.error("Horário bloqueado para todos os profissionais disponíveis neste dia.")
+                                    conn.close()
+                                    st.stop()
+
+                                # Escolher o primeiro disponível sem conflito
+                                escolhido = None
+                                dia_str = data.strftime('%d/%m/%Y')
+
+                                for _, prof in profs_disponiveis.iterrows():
+                                    agendamentos = conn.execute("""
+                                        SELECT data_hora_pref
+                                        FROM atendimentos
+                                        WHERE profissional_id = ?
+                                        AND status NOT IN ('Cancelado', 'Não Compareceu')
+                                        AND substr(data_hora_pref, 1, 10) = ?
+                                    """, (prof['id'], dia_str)).fetchall()
+                                    
+                                    conflito = False
+                                    for (dh,) in agendamentos:
+                                        try:
+                                            dh_dt = datetime.strptime(dh, "%d/%m/%Y às %H:%M")
+                                            minutos_diff = abs((data_hora_dt - dh_dt).total_seconds() / 60)
+                                            if minutos_diff < INTERVALO_MINIMO_MINUTOS:
+                                                conflito = True
                                                 break
-                                        if escolhido:
-                                            protocolo = uuid.uuid4().hex[:10].upper()
-                                            descricao_final = obs.strip() if obs else ""
-                                            if endereco_domiciliar.strip():
-                                                if descricao_final:
-                                                    descricao_final += "\n\n"
-                                                descricao_final += f"**Endereço para atendimento domiciliar:**\n{endereco_domiciliar.strip()}"
-                                            try:
-                                                cur = conn.cursor()
-                                                cur.execute("""
-                                                    INSERT INTO atendimentos
-                                                    (id, servico, pet_id, data_hora_pref, descricao, criado_por, profissional_id)
-                                                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                                                """, (protocolo, servico, pet_id, data_hora_str, descricao_final or None, st.session_state.user, escolhido['id']))
-                                                conn.commit()
-                                                st.success(f"**Agendamento confirmado!**\nProtocolo: **{protocolo}**\nProfissional: {escolhido['nome']}")
-                                                if servico == "Consulta em Domicílio":
-                                                    st.info(f"Endereço domiciliar registrado:\n{endereco_domiciliar}")
-                                                st.session_state.agendamento_sucesso = True
-                                                st.rerun()
-                                            except Exception as e:
-                                                st.error(f"Erro ao salvar agendamento: {str(e)}")
-                                        else:
-                                            st.error("Nenhum profissional disponível neste horário. Tente outro slot.")
+                                        except ValueError:
+                                            pass  # ignora formatos inválidos
+                                    
+                                    if not conflito:
+                                        escolhido = {'id': prof['id'], 'nome': prof['nome_completo']}
+                                        break
+
+                                if escolhido is None:
+                                    st.error("Todos os veterinários/profissionais disponíveis já têm agendamento muito próximo neste horário. Tente outro slot.")
+                                else:
+                                    # Prosseguir com insert
+                                    protocolo = uuid.uuid4().hex[:10].upper()
+                                    descricao_final = obs.strip() if obs else ""
+                                    if endereco_domiciliar.strip():
+                                        if descricao_final:
+                                            descricao_final += "\n\n"
+                                        descricao_final += f"**Endereço para atendimento domiciliar:**\n{endereco_domiciliar.strip()}"
+                                    try:
+                                        cur = conn.cursor()
+                                        cur.execute("""
+                                            INSERT INTO atendimentos
+                                            (id, servico, pet_id, data_hora_pref, descricao, criado_por, profissional_id)
+                                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                                        """, (protocolo, servico, pet_id, data_hora_str, descricao_final or None, st.session_state.user, escolhido['id']))
+                                        conn.commit()
+                                        st.success(f"**Agendamento confirmado!**\nProtocolo: **{protocolo}**\nProfissional: {escolhido['nome']}")
+                                        if servico == "Consulta em Domicílio":
+                                            st.info(f"Endereço domiciliar registrado:\n{endereco_domiciliar}")
+                                        st.session_state.agendamento_sucesso = True
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao salvar agendamento: {str(e)}")
                                 conn.close()
             if st.session_state.get('agendamento_sucesso', False):
                 st.success("Agendamento realizado com sucesso! Formulário limpo para novo agendamento.")
                 st.session_state.agendamento_sucesso = False
-
         elif st.session_state.menu == "Meus Agendamentos":
             st.header(f"Meus Agendamentos - {st.session_state.nome or st.session_state.user}")
             conn = get_conn()
@@ -1248,7 +1245,6 @@ else:
                 st.error(f"Erro ao carregar agendamentos: {str(e)}")
             finally:
                 conn.close()
-
 # Rodapé
 st.markdown("---")
 st.caption(f"{APP_NAME} • Sistema de Agendamento • {YEAR}")
