@@ -9,6 +9,7 @@ from datetime import datetime, date, time, timedelta
 from PIL import Image
 import io
 import re
+
 # Configurações
 DB_PATH = "petclub.db"
 APP_NAME = "PET CLUB"
@@ -21,16 +22,22 @@ HORARIO_ABERTURA = time(8, 0)
 HORARIO_FECHAMENTO = time(18, 0)
 INTERVALO_MINIMO_MINUTOS = 30
 DIAS_SEMANA = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+
 def get_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
+
 def generate_salt():
     return base64.b64encode(secrets.token_bytes(16)).decode()
+
 def hash_password(plain, salt):
     return base64.b64encode(hashlib.pbkdf2_hmac("sha256", plain.encode(), base64.b64decode(salt), 100000)).decode()
+
 def verify_password(plain, stored_hash, stored_salt):
     return hash_password(plain, stored_salt) == stored_hash
+
 def normalize_username(username):
     return (username or "").strip().lower()
+
 def resize_and_optimize_image(uploaded_file):
     if uploaded_file is None:
         return None
@@ -48,6 +55,7 @@ def resize_and_optimize_image(uploaded_file):
     except Exception as e:
         st.warning(f"Erro na imagem: {str(e)}")
         return None
+
 def show_paw_prints():
     st.markdown("""
         <style>
@@ -81,6 +89,7 @@ def show_paw_prints():
             <div class="paw-step" style="--step:8; --start-x:87%; --start-y:2%;">🐾</div>
         </div>
     """, unsafe_allow_html=True)
+
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
@@ -135,6 +144,9 @@ def init_db():
     if 'profissional_id' not in columns:
         cur.execute("ALTER TABLE usuarios ADD COLUMN profissional_id INTEGER")
         conn.commit()
+    if 'last_login' not in columns:
+        cur.execute("ALTER TABLE usuarios ADD COLUMN last_login TEXT")
+        conn.commit()
     if not cur.execute("SELECT 1 FROM profissionais LIMIT 1").fetchone():
         cur.executemany("INSERT OR IGNORE INTO profissionais (nome_completo, funcao, telefone, email, ativo) VALUES (?, ?, ?, ?, ?)",
                         [("Ana Silva", "Tosadora", "(19) 99999-9999", "ana@petclub.com", 1),
@@ -147,8 +159,11 @@ def init_db():
                     ("admin", hash_pw, salt))
     conn.commit()
     conn.close()
+
 init_db()
+
 st.set_page_config(page_title=f"{APP_NAME} - Agendamentos", layout="wide", page_icon="🐾")
+
 st.markdown("""
     <style>
     .stButton > button {width: 100%; border-radius: 8px; font-weight: bold; margin: 10px 0; padding: 12px;}
@@ -156,17 +171,20 @@ st.markdown("""
     .warning-box {background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 8px; border: 1px solid #ffeeba; margin: 15px 0;}
     </style>
 """, unsafe_allow_html=True)
+
 for key in ["user", "nome", "email", "role", "menu", "agendamento_sucesso", "profissional_id"]:
     if key not in st.session_state:
         st.session_state[key] = None
+
 if st.session_state.user and st.session_state.menu is None:
     st.session_state.menu = "Serviços Agendados" if st.session_state.role == "admin" else ("Meus Pets" if st.session_state.role == "cliente" else "Meus Atendimentos")
+
 # SIDEBAR
 st.sidebar.title(f"🐾 {APP_NAME}")
 if st.session_state.user:
     st.sidebar.write(f"Olá, **{st.session_state.nome or st.session_state.user}** ({st.session_state.role.capitalize()})")
     if st.session_state.role == "admin":
-        menu_options = ["Serviços Agendados", "Clientes Cadastrados", "Pets Cadastrados", "Profissionais", "Bloqueios de Agenda", "Sair"]
+        menu_options = ["Serviços Agendados", "Relatórios", "Clientes Cadastrados", "Pets Cadastrados", "Profissionais", "Bloqueios de Agenda", "Sair"]
     elif st.session_state.role == "profissional":
         menu_options = ["Meus Atendimentos", "Sair"]
     else:
@@ -178,7 +196,9 @@ if st.session_state.user:
         for k in list(st.session_state.keys()):
             del st.session_state[k]
         st.rerun()
+
 st.sidebar.caption(f"{APP_NAME} • Sistema de Agendamento • {YEAR}")
+
 # CONSULTA PÚBLICA
 st.markdown("### Consultar Agendamento pelo Protocolo")
 col1, col2 = st.columns([3, 1])
@@ -225,7 +245,9 @@ with col2:
                 st.error("Protocolo não encontrado.")
         else:
             st.warning("Digite o protocolo.")
+
 st.markdown("---")
+
 # LOGIN / CADASTRO
 if st.session_state.user is None:
     st.header(f"Bem-vindo ao {APP_NAME}")
@@ -246,6 +268,10 @@ if st.session_state.user is None:
                 st.session_state.email = row[5]
                 st.session_state.role = row[3]
                 st.session_state.profissional_id = row[7]
+                conn = get_conn()
+                conn.execute("UPDATE usuarios SET last_login = datetime('now','localtime') WHERE username = ?", (st.session_state.user,))
+                conn.commit()
+                conn.close()
                 st.success(f"Bem-vindo(a), {row[4]}!")
                 st.rerun()
             else:
@@ -316,12 +342,22 @@ if st.session_state.user is None:
                     st.error("Usuário ou e-mail já cadastrado.")
                 except Exception as e:
                     st.error(str(e))
+
 else:
     # ÁREA LOGADA
     if st.session_state.role == "profissional":
         if st.session_state.menu == "Meus Atendimentos":
             st.header(f"Meus Atendimentos Pendentes - {st.session_state.nome}")
             conn = get_conn()
+            last_login = conn.execute("SELECT last_login FROM usuarios WHERE username = ?", (st.session_state.user,)).fetchone()[0]
+            new_count = conn.execute("""
+                SELECT COUNT(*) FROM atendimentos
+                WHERE profissional_id = ?
+                  AND status = 'Pendente'
+                  AND data_agendamento > ?
+            """, (st.session_state.profissional_id, last_login or '1900-01-01 00:00:00')).fetchone()[0]
+            if new_count > 0:
+                st.info(f"Você tem {new_count} novos agendamentos desde o último login!")
             df = pd.read_sql_query("""
                 SELECT
                     a.id AS protocolo,
@@ -365,9 +401,10 @@ else:
                                 st.error(f"Erro ao finalizar: {str(e)}")
                             finally:
                                 conn.close()
+
     if st.session_state.role == "admin":
         if st.session_state.menu == "Serviços Agendados":
-            st.header("Serviços Agendados - Painel Administrativo")
+            st.header(f"Serviços Agendados - {APP_NAME}")
             conn = get_conn()
             df = pd.read_sql_query("""
                 SELECT
@@ -477,8 +514,73 @@ else:
                     use_container_width=True,
                     hide_index=True
                 )
+
+        elif st.session_state.menu == "Relatórios":
+            st.header(f"Relatórios Gerenciais - {APP_NAME}")
+            st.caption("Visão geral do negócio - atualizado em tempo real")
+            conn = get_conn()
+            st.subheader("Visão Geral")
+            col1, col2, col3, col4 = st.columns(4)
+            total_agend = conn.execute("SELECT COUNT(*) FROM atendimentos").fetchone()[0]
+            pendentes = conn.execute("SELECT COUNT(*) FROM atendimentos WHERE status = 'Pendente'").fetchone()[0]
+            concluidos = conn.execute("SELECT COUNT(*) FROM atendimentos WHERE status = 'Finalizado'").fetchone()[0]
+            cancelados = conn.execute("SELECT COUNT(*) FROM atendimentos WHERE status = 'Cancelado'").fetchone()[0]
+            col1.metric("Total Agendamentos", total_agend)
+            col2.metric("Pendentes", pendentes)
+            col3.metric("Concluídos", concluidos)
+            col4.metric("Cancelados", cancelados)
+            st.subheader("Últimos 30 Dias")
+            df_recente = pd.read_sql_query("""
+                SELECT
+                    date(data_agendamento) as data,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'Finalizado' THEN 1 ELSE 0 END) as concluidos,
+                    SUM(CASE WHEN status = 'Cancelado' THEN 1 ELSE 0 END) as cancelados
+                FROM atendimentos
+                WHERE data_agendamento >= date('now', '-30 days')
+                GROUP BY date(data_agendamento)
+                ORDER BY data
+            """, conn)
+            if not df_recente.empty:
+                st.line_chart(df_recente.set_index("data")[["total", "concluidos"]])
+                st.dataframe(df_recente, use_container_width=True)
+            else:
+                st.info("Nenhum agendamento nos últimos 30 dias.")
+            st.subheader("Serviços mais procurados")
+            df_serv = pd.read_sql_query("""
+                SELECT servico, COUNT(*) as qtd
+                FROM atendimentos
+                GROUP BY servico
+                ORDER BY qtd DESC
+                LIMIT 10
+            """, conn)
+            st.bar_chart(df_serv.set_index("servico")["qtd"])
+            st.subheader("Clientes mais frequentes")
+            df_clientes = pd.read_sql_query("""
+                SELECT u.nome_completo, COUNT(a.id) as agendamentos
+                FROM atendimentos a
+                JOIN usuarios u ON a.criado_por = u.username
+                GROUP BY u.username, u.nome_completo
+                ORDER BY agendamentos DESC
+                LIMIT 10
+            """, conn)
+            st.dataframe(df_clientes, use_container_width=True)
+            st.subheader("Profissionais mais solicitados")
+            df_prof = pd.read_sql_query("""
+                SELECT pr.nome_completo, COUNT(a.id) as atendimentos
+                FROM atendimentos a
+                JOIN profissionais pr ON a.profissional_id = pr.id
+                GROUP BY pr.id
+                ORDER BY atendimentos DESC
+                LIMIT 8
+            """, conn)
+            st.dataframe(df_prof, use_container_width=True)
+            conn.close()
+            st.markdown("---")
+            st.caption(f"Relatório gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')} - {APP_NAME}")
+
         elif st.session_state.menu == "Clientes Cadastrados":
-            st.header("Clientes Cadastrados")
+            st.header(f"Clientes Cadastrados - {APP_NAME}")
             conn = get_conn()
             clientes_df = pd.read_sql_query("""
                 SELECT username, nome_completo, email, telefone, data_cadastro, ativo
@@ -521,8 +623,9 @@ else:
                     use_container_width=True,
                     hide_index=True
                 )
+
         elif st.session_state.menu == "Profissionais":
-            st.header("Cadastro de Funcionários / Profissionais")
+            st.header(f"Profissionais - {APP_NAME}")
             st.subheader("Adicionar Novo Profissional")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -637,8 +740,9 @@ else:
                             finally:
                                 conn_del.close()
             conn.close()
+
         elif st.session_state.menu == "Bloqueios de Agenda":
-            st.header("Bloqueios de Agenda")
+            st.header(f"Bloqueios de Agenda - {APP_NAME}")
             conn = get_conn()
             profs_df = pd.read_sql_query("SELECT id, nome_completo FROM profissionais WHERE ativo = 1 ORDER BY nome_completo", conn)
             conn.close()
@@ -702,9 +806,10 @@ else:
                                 st.error(f"Erro ao excluir: {str(e)}")
                             finally:
                                 conn_del.close()
-    else: # Área do cliente
+
+    else:  # Área do cliente
         if st.session_state.menu == "Editar Cadastro":
-            st.header("Editar Meu Cadastro")
+            st.header(f"Editar Meu Cadastro - {st.session_state.nome or st.session_state.user}")
             conn = get_conn()
             user_data = conn.execute("""
                 SELECT nome_completo, email, telefone, endereco
@@ -850,6 +955,7 @@ else:
                                 st.error(f"Erro ao alterar senha: {str(e)}")
                             finally:
                                 conn.close()
+
         elif st.session_state.menu == "Meus Pets":
             st.header(f"Meus Pets - {st.session_state.nome or st.session_state.user}")
             conn = get_conn()
@@ -973,6 +1079,7 @@ else:
                             st.error(f"Erro ao cadastrar pet: {str(e)}")
                         finally:
                             conn.close()
+
         elif st.session_state.menu == "Agendar Serviço":
             st.header(f"Agendar Serviço - {st.session_state.nome or st.session_state.user}")
             if 'agendamento_sucesso' not in st.session_state:
@@ -994,6 +1101,7 @@ else:
             ).fetchone()
             endereco_cadastro = endereco_cadastro_row[0] if endereco_cadastro_row and endereco_cadastro_row[0] else ""
             conn.close()
+
             if pets_df.empty:
                 st.warning("Você ainda não tem pets cadastrados. Vá em 'Meus Pets'.")
             else:
@@ -1017,6 +1125,7 @@ else:
                             )
                         with col2:
                             hora = st.time_input("Horário desejado", time(9, 0), step=1800, key="hora_agenda")
+
                         servico_map = {
                             "Banho Simples": "tosador",
                             "Tosa Higiênica": "tosador",
@@ -1029,17 +1138,24 @@ else:
                             "Taxi Dog": "motorista",
                             "Outros": None
                         }
+
                         servico = st.selectbox("Serviço", list(servico_map.keys()), key="servico_agenda")
+
+                        # Serviços que exigem endereço completo
+                        SERVICOS_DOMICILIARES = {"Consulta em Domicílio", "Taxi Dog"}
+                        exige_endereco = servico in SERVICOS_DOMICILIARES
+
                         obs = st.text_area("Observações / necessidades especiais", height=100, key="obs_agenda")
+
                         endereco_domiciliar = ""
-                        if servico == "Consulta em Domicílio":
-                            st.subheader("Endereço para atendimento domiciliar *")
+                        if exige_endereco:
+                            st.subheader(f"Endereço para {servico.lower()} *")
                             usar_mesmo_endereco = st.radio(
-                                "O endereço da consulta é o mesmo do seu cadastro?",
+                                "O endereço é o mesmo do seu cadastro?",
                                 options=["Sim (usar o endereço cadastrado)", "Não (informar outro endereço)"],
                                 index=0,
                                 horizontal=True,
-                                key="usar_endereco_cadastro_radio"
+                                key=f"usar_endereco_{servico.replace(' ', '_').replace('í', 'i')}"
                             )
                             if usar_mesmo_endereco == "Sim (usar o endereço cadastrado)":
                                 if endereco_cadastro:
@@ -1047,75 +1163,69 @@ else:
                                         "Endereço do cadastro (você pode editar se necessário)",
                                         value=endereco_cadastro,
                                         height=120,
-                                        key="endereco_domiciliar_auto"
+                                        key=f"endereco_auto_{servico.replace(' ', '_').replace('í', 'i')}"
                                     )
                                 else:
                                     st.warning("Você não possui endereço cadastrado. Por favor, informe abaixo ou atualize em 'Editar Cadastro'.")
                                     endereco_domiciliar = st.text_area(
-                                        "Endereço completo para atendimento domiciliar *",
+                                        f"Endereço completo para {servico.lower()} *",
                                         height=120,
                                         placeholder="Rua Exemplo, 123 - Apto 45 - Bairro Centro - Campinas/SP - CEP 13000-000",
-                                        key="endereco_domiciliar_manual"
+                                        key=f"endereco_manual_{servico.replace(' ', '_').replace('í', 'i')}"
                                     )
                             else:
                                 endereco_domiciliar = st.text_area(
-                                    "Endereço completo para atendimento domiciliar *",
+                                    f"Endereço completo para {servico.lower()} *",
                                     height=120,
                                     placeholder="Rua Exemplo, 123 - Apto 45 - Bairro Centro - Campinas/SP - CEP 13000-000",
-                                    key="endereco_domiciliar_manual"
+                                    key=f"endereco_manual_{servico.replace(' ', '_').replace('í', 'i')}"
                                 )
                             if not endereco_domiciliar.strip():
-                                st.error("O endereço domiciliar é obrigatório para consultas domiciliares.")
+                                st.error(f"O endereço é obrigatório para {servico}.")
                                 st.stop()
+
                         if st.button("Agendar", type="primary"):
                             show_paw_prints()
                             data_str = data.strftime('%d/%m/%Y')
                             hora_str = hora.strftime('%H:%M')
                             data_hora_str = f"{data_str} às {hora_str}"
                             data_hora_dt = datetime.combine(data, hora)
+
                             if data < date.today():
                                 st.error("Não é possível agendar para datas passadas.")
                             elif not (HORARIO_ABERTURA <= hora <= HORARIO_FECHAMENTO):
                                 st.error(f"Horário fora do expediente ({HORARIO_ABERTURA.strftime('%H:%M')} às {HORARIO_FECHAMENTO.strftime('%H:%M')}).")
                             else:
                                 conn = get_conn()
-                                # Definir filtro de função de forma mais tolerante
-                                def get_funcao_filter(servico):
-                                    if servico in ["Consulta Veterinária", "Consulta em Domicílio", "Vacinação", "Exames"]:
-                                        # Aceita variações comuns
+
+                                def get_funcao_filter(serv):
+                                    if serv in ["Consulta Veterinária", "Consulta em Domicílio", "Vacinação", "Exames"]:
                                         return lambda f: any(palavra in f.lower() for palavra in ["veterin", "vet", "veter"])
-                                    elif servico in ["Banho Simples", "Tosa Higiênica", "Tosa Completa", "Banho + Tosa"]:
+                                    elif serv in ["Banho Simples", "Tosa Higiênica", "Tosa Completa", "Banho + Tosa"]:
                                         return lambda f: "tos" in f.lower()
-                                    elif servico == "Taxi Dog":
-                                        return lambda f: "motorista" in f.lower() or "taxi" in f.lower()
+                                    elif serv == "Taxi Dog":
+                                        return lambda f: any(palavra in f.lower() for palavra in ["motorista", "taxi", "taxidog", "taxi dog"])
                                     else:
-                                        return lambda f: True  # Outros → qualquer profissional ativo
+                                        return lambda f: True
 
                                 filtro_funcao = get_funcao_filter(servico)
-
                                 profs_df['funcao_lower'] = profs_df['funcao'].fillna("").str.strip().str.lower()
                                 profs_disponiveis = profs_df[profs_df['funcao_lower'].apply(filtro_funcao)]
-
-                                # Limpar coluna temporária
                                 profs_df.drop(columns=['funcao_lower'], inplace=True)
 
                                 if profs_disponiveis.empty:
-                                    if "Consulta" in servico and "Domicílio" in servico:
-                                        st.error("Não há veterinário(a) disponível no momento para consulta em domicílio. Contate o Pet Club pelo WhatsApp: (11) 99247-8769")
-                                    else:
-                                        st.error(f"Não há profissional disponível para o serviço '{servico}'. Contate o Pet Club.")
+                                    st.error(f"Não há profissional disponível para o serviço '{servico}' no momento. Contate o PET CLUB.")
                                     conn.close()
                                     st.stop()
 
-                                # Restante da lógica de bloqueios e conflitos
                                 bloqueado = False
                                 for _, prof in profs_disponiveis.iterrows():
                                     count = conn.execute("""
                                         SELECT COUNT(*) FROM bloqueios_horarios
                                         WHERE profissional_id = ?
-                                        AND dia_semana = ?
-                                        AND hora_inicio <= ?
-                                        AND hora_fim >= ?
+                                          AND dia_semana = ?
+                                          AND hora_inicio <= ?
+                                          AND hora_fim >= ?
                                     """, (prof['id'], data.strftime('%A'), hora.strftime('%H:%M'), hora.strftime('%H:%M'))).fetchone()[0]
                                     if count > 0:
                                         bloqueado = True
@@ -1126,19 +1236,16 @@ else:
                                     conn.close()
                                     st.stop()
 
-                                # Escolher o primeiro disponível sem conflito
                                 escolhido = None
                                 dia_str = data.strftime('%d/%m/%Y')
-
                                 for _, prof in profs_disponiveis.iterrows():
                                     agendamentos = conn.execute("""
                                         SELECT data_hora_pref
                                         FROM atendimentos
                                         WHERE profissional_id = ?
-                                        AND status NOT IN ('Cancelado', 'Não Compareceu')
-                                        AND substr(data_hora_pref, 1, 10) = ?
+                                          AND status NOT IN ('Cancelado', 'Não Compareceu')
+                                          AND substr(data_hora_pref, 1, 10) = ?
                                     """, (prof['id'], dia_str)).fetchall()
-                                    
                                     conflito = False
                                     for (dh,) in agendamentos:
                                         try:
@@ -1148,22 +1255,21 @@ else:
                                                 conflito = True
                                                 break
                                         except ValueError:
-                                            pass  # ignora formatos inválidos
-                                    
+                                            pass
                                     if not conflito:
                                         escolhido = {'id': prof['id'], 'nome': prof['nome_completo']}
                                         break
 
                                 if escolhido is None:
-                                    st.error("Todos os veterinários/profissionais disponíveis já têm agendamento muito próximo neste horário. Tente outro slot.")
+                                    st.error("Todos os profissionais disponíveis já têm agendamento muito próximo neste horário. Tente outro slot.")
                                 else:
-                                    # Prosseguir com insert
                                     protocolo = uuid.uuid4().hex[:10].upper()
                                     descricao_final = obs.strip() if obs else ""
                                     if endereco_domiciliar.strip():
                                         if descricao_final:
                                             descricao_final += "\n\n"
-                                        descricao_final += f"**Endereço para atendimento domiciliar:**\n{endereco_domiciliar.strip()}"
+                                        descricao_final += f"**Endereço para {servico}:**\n{endereco_domiciliar.strip()}"
+
                                     try:
                                         cur = conn.cursor()
                                         cur.execute("""
@@ -1173,16 +1279,19 @@ else:
                                         """, (protocolo, servico, pet_id, data_hora_str, descricao_final or None, st.session_state.user, escolhido['id']))
                                         conn.commit()
                                         st.success(f"**Agendamento confirmado!**\nProtocolo: **{protocolo}**\nProfissional: {escolhido['nome']}")
-                                        if servico == "Consulta em Domicílio":
-                                            st.info(f"Endereço domiciliar registrado:\n{endereco_domiciliar}")
+                                        if exige_endereco:
+                                            st.info(f"Endereço registrado para {servico}:\n{endereco_domiciliar}")
                                         st.session_state.agendamento_sucesso = True
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"Erro ao salvar agendamento: {str(e)}")
+
                                 conn.close()
+
             if st.session_state.get('agendamento_sucesso', False):
                 st.success("Agendamento realizado com sucesso! Formulário limpo para novo agendamento.")
                 st.session_state.agendamento_sucesso = False
+
         elif st.session_state.menu == "Meus Agendamentos":
             st.header(f"Meus Agendamentos - {st.session_state.nome or st.session_state.user}")
             conn = get_conn()
@@ -1245,6 +1354,7 @@ else:
                 st.error(f"Erro ao carregar agendamentos: {str(e)}")
             finally:
                 conn.close()
+
 # Rodapé
 st.markdown("---")
 st.caption(f"{APP_NAME} • Sistema de Agendamento • {YEAR}")
